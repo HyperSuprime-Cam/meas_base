@@ -82,7 +82,8 @@ class CentroidTestCase(utilsTests.TestCase):
             im.set(x, y, (1010,))
 
             source = table.addNew()
-            foot = afwDetection.Footprint(exp.getBBox(afwImage.LOCAL))
+            spans = afwGeom.SpanSet(exp.getBBox(afwImage.LOCAL))
+            foot = afwDetection.Footprint(spans)
             foot.addPeak(x + x0, y + y0, 1010)
             source.setFootprint(foot)
             centroider.measure(source, exp)
@@ -146,7 +147,8 @@ class SingleFrameMeasurementTaskTestCase(utilsTests.TestCase):
         measCat = afwTable.SourceCatalog(schema)
 
         source = measCat.addNew()
-        fp = afwDetection.Footprint(self.exp.getBBox(afwImage.LOCAL))
+        spans = afwGeom.SpanSet(self.exp.getBBox(afwImage.LOCAL))
+        fp = afwDetection.Footprint(spans)
         fp.addPeak(50, 50, 1000.0)
         source.setFootprint(fp)
         # Then run the default SFM task.  Results not checked
