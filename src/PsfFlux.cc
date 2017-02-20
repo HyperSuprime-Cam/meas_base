@@ -28,8 +28,7 @@
 
 #include "lsst/afw/table/Source.h"
 #include "lsst/afw/detection/Psf.h"
-#include "lsst/afw/detection/FootprintArray.h"
-#include "lsst/afw/detection/FootprintArray.cc"
+#include "lsst/afw/geom/SpanSet.h"
 #include "lsst/meas/base/PsfFlux.h"
 
 namespace lsst { namespace meas { namespace base {
@@ -84,7 +83,8 @@ void PsfFluxAlgorithm::measure(
         _flagHandler.setValue(measRecord, FAILURE.number, true);  // if we had a suspect flag, we'd set that instead
         _flagHandler.setValue(measRecord, EDGE.number, true);
     }
-    afw::detection::Footprint fitRegion(fitBBox);
+    auto fitRegionSpans = std::make_shared<afw::geom::SpanSet>(fitBBox);
+    afw::detection::Footprint fitRegion(fitRegionSpans);
     if (!_ctrl.badMaskPlanes.empty()) {
         afw::image::MaskPixel badBits = 0x0;
         for (
@@ -94,7 +94,12 @@ void PsfFluxAlgorithm::measure(
         ) {
             badBits |= exposure.getMaskedImage().getMask()->getPlaneBitMask(*i);
         }
-        fitRegion.intersectMask(*exposure.getMaskedImage().getMask(), badBits);
+        auto tmpSpans = afw::geom::maskToSpanSet(*exposure.getMaskedImage().getMask(),
+                                                 [&badBits]
+                                                 (afw::image::MaskPixel const & bitPattern)
+                                                 {return bitPattern & badBits;});
+        fitRegion.setSpans(fitRegion.getSpans()->intersectNot(*tmpSpans)->clippedTo(
+            exposure.getMaskedImage().getMask()->getBBox()));
     }
     if (fitRegion.getArea() == 0) {
         throw LSST_EXCEPT(
@@ -106,25 +111,14 @@ void PsfFluxAlgorithm::measure(
     typedef afw::detection::Psf::Pixel PsfPixel;
     typedef afw::image::MaskedImage<float>::Variance::Pixel VarPixel;
     ndarray::EigenView<PsfPixel,1,1,Eigen::ArrayXpr> model(
-        afw::detection::flattenArray(
-            fitRegion,
-            psfImage->getArray(),
-            psfImage->getXY0()
-        )
+        fitRegion.getSpans()->flatten(psfImage->getArray(), psfImage->getXY0())
     );
     ndarray::EigenView<float,1,1,Eigen::ArrayXpr> data(
-        afw::detection::flattenArray(
-            fitRegion,
-            exposure.getMaskedImage().getImage()->getArray(),
-            exposure.getXY0()
-        )
+        fitRegion.getSpans()->flatten(exposure.getMaskedImage().getImage()->getArray(), exposure.getXY0())
     );
     ndarray::EigenView<VarPixel,1,1,Eigen::ArrayXpr> variance(
-        afw::detection::flattenArray(
-            fitRegion,
-            exposure.getMaskedImage().getVariance()->getArray(),
-            exposure.getXY0()
-        )
+        fitRegion.getSpans()->flatten(exposure.getMaskedImage().getVariance()->getArray(),
+                                      exposure.getXY0())
     );
     PsfPixel alpha = model.matrix().squaredNorm();
     FluxResult result;
