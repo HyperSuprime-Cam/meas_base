@@ -109,7 +109,8 @@ class CatalogCalculationConfig(lsst.pex.config.Config):
     '''
     plugins = CatalogCalculationPlugin.registry.makeField(
         multi=True,
-        default=["base_ClassificationExtendedness"],
+        default=["base_ClassificationExtendedness",
+                 "base_FootprintArea"],
         doc="Plugins to be run and their configuration")
 
 
